@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, DatePickerAndroid, TimePickerAndroid, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, Modal, Dimensions } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 
 const COLORS = {
@@ -13,6 +13,9 @@ const COLORS = {
   border: '#E5E7EB',
   success: '#10B981',
 };
+
+const TIMES = ['08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM', '07:00 PM', '08:00 PM'];
+const DATES = ['Apr 23', 'Apr 24', 'Apr 25', 'Apr 26', 'Apr 27', 'Apr 28', 'Apr 29', 'Apr 30', 'May 01', 'May 02', 'May 03'];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('map');
@@ -59,6 +62,9 @@ export default function App() {
     lng: -46.4244,
   });
 
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
   const [mapRegion, setMapRegion] = useState({
     latitude: -23.5505,
     longitude: -46.4244,
@@ -82,35 +88,14 @@ export default function App() {
     Alert.alert('Location Set!', `Selected: ${mapRegion.latitude.toFixed(4)}, ${mapRegion.longitude.toFixed(4)}`);
   };
 
-  const openDatePicker = async () => {
-    try {
-      const { action, year, month, day } = await DatePickerAndroid.open({
-        date: new Date(),
-        mode: 'spinner',
-      });
-      if (action !== DatePickerAndroid.dismissedAction) {
-        const dateStr = `${month + 1}/${day}/${year}`;
-        setFormData({ ...formData, date: dateStr });
-      }
-    } catch ({ code, message }) {
-      console.warn('Cannot open date picker.');
-    }
+  const selectDate = (date) => {
+    setFormData({ ...formData, date });
+    setShowDatePicker(false);
   };
 
-  const openTimePicker = async () => {
-    try {
-      const { action, hour, minute } = await TimePickerAndroid.open({
-        hour: 14,
-        minute: 0,
-        is24Hour: false,
-      });
-      if (action !== TimePickerAndroid.dismissedAction) {
-        const timeStr = `${hour}:${minute < 10 ? '0' : ''}${minute} ${hour >= 12 ? 'PM' : 'AM'}`;
-        setFormData({ ...formData, time: timeStr });
-      }
-    } catch ({ code, message }) {
-      console.warn('Cannot open time picker.');
-    }
+  const selectTime = (time) => {
+    setFormData({ ...formData, time });
+    setShowTimePicker(false);
   };
 
   const createMatch = () => {
@@ -336,16 +321,16 @@ export default function App() {
 
           {/* Date Picker */}
           <View style={styles.formField}>
-            <Text style={styles.label}>Date</Text>
-            <TouchableOpacity style={styles.pickerBtn} onPress={openDatePicker}>
+            <Text style={styles.label}>📅 Date</Text>
+            <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowDatePicker(true)}>
               <Text style={styles.pickerBtnText}>{formData.date}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Time Picker */}
           <View style={styles.formField}>
-            <Text style={styles.label}>Time</Text>
-            <TouchableOpacity style={styles.pickerBtn} onPress={openTimePicker}>
+            <Text style={styles.label}>⏰ Time</Text>
+            <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowTimePicker(true)}>
               <Text style={styles.pickerBtnText}>{formData.time}</Text>
             </TouchableOpacity>
           </View>
@@ -356,6 +341,60 @@ export default function App() {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      {/* Date Picker Modal */}
+      <Modal visible={showDatePicker} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Date</Text>
+              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerScroll}>
+              {DATES.map((date) => (
+                <TouchableOpacity
+                  key={date}
+                  style={[styles.pickerOption, formData.date === date && styles.pickerOptionActive]}
+                  onPress={() => selectDate(date)}
+                >
+                  <Text style={[styles.pickerOptionText, formData.date === date && styles.pickerOptionTextActive]}>
+                    {date}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Time Picker Modal */}
+      <Modal visible={showTimePicker} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Time</Text>
+              <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerScroll}>
+              {TIMES.map((time) => (
+                <TouchableOpacity
+                  key={time}
+                  style={[styles.pickerOption, formData.time === time && styles.pickerOptionActive]}
+                  onPress={() => selectTime(time)}
+                >
+                  <Text style={[styles.pickerOptionText, formData.time === time && styles.pickerOptionTextActive]}>
+                    {time}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -617,6 +656,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: Dimensions.get('window').height * 0.7,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  modalClose: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: COLORS.textLight,
+  },
+  pickerScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  pickerOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: COLORS.background,
+  },
+  pickerOptionActive: {
+    backgroundColor: COLORS.primary,
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  pickerOptionTextActive: {
+    color: COLORS.white,
   },
   createBtn: {
     paddingVertical: 16,
