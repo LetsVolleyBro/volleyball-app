@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, DatePickerAndroid, TimePickerAndroid, Platform } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 
 const COLORS = {
@@ -19,46 +19,42 @@ export default function App() {
   const [matches, setMatches] = useState([
     {
       id: 1,
-      name: 'Beach Volleyball at Copacabana',
+      name: '3vs3',
       location: 'Copacabana Beach',
       lat: -23.5505,
       lng: -46.4244,
       time: '10:00 AM',
       players: 6,
-      maxPlayers: 12,
-      type: 'Beach',
+      maxPlayers: 6,
     },
     {
       id: 2,
-      name: 'Court Match at Leblon',
+      name: '4vs4',
       location: 'Leblon Sports Court',
       lat: -23.5625,
       lng: -46.3494,
       time: '3:00 PM',
       players: 8,
-      maxPlayers: 12,
-      type: 'Indoor',
+      maxPlayers: 8,
     },
     {
       id: 3,
-      name: 'Evening Game at Ipanema',
+      name: '3vs3',
       location: 'Ipanema Park',
       lat: -23.5886,
       lng: -46.4244,
       time: '5:30 PM',
       players: 4,
-      maxPlayers: 12,
-      type: 'Beach',
+      maxPlayers: 6,
     },
   ]);
 
   // Create form state
   const [formData, setFormData] = useState({
-    name: '',
+    gameMode: '3vs3',
     location: 'Select location on map',
-    date: '',
-    time: '',
-    type: 'Beach',
+    date: 'Select date',
+    time: 'Select time',
     lat: -23.5505,
     lng: -46.4244,
   });
@@ -86,42 +82,69 @@ export default function App() {
     Alert.alert('Location Set!', `Selected: ${mapRegion.latitude.toFixed(4)}, ${mapRegion.longitude.toFixed(4)}`);
   };
 
+  const openDatePicker = async () => {
+    try {
+      const { action, year, month, day } = await DatePickerAndroid.open({
+        date: new Date(),
+        mode: 'spinner',
+      });
+      if (action !== DatePickerAndroid.dismissedAction) {
+        const dateStr = `${month + 1}/${day}/${year}`;
+        setFormData({ ...formData, date: dateStr });
+      }
+    } catch ({ code, message }) {
+      console.warn('Cannot open date picker.');
+    }
+  };
+
+  const openTimePicker = async () => {
+    try {
+      const { action, hour, minute } = await TimePickerAndroid.open({
+        hour: 14,
+        minute: 0,
+        is24Hour: false,
+      });
+      if (action !== TimePickerAndroid.dismissedAction) {
+        const timeStr = `${hour}:${minute < 10 ? '0' : ''}${minute} ${hour >= 12 ? 'PM' : 'AM'}`;
+        setFormData({ ...formData, time: timeStr });
+      }
+    } catch ({ code, message }) {
+      console.warn('Cannot open time picker.');
+    }
+  };
+
   const createMatch = () => {
-    if (!formData.name.trim()) {
-      Alert.alert('Error', 'Please enter a match name');
+    if (formData.date === 'Select date') {
+      Alert.alert('Error', 'Please select a date');
       return;
     }
-    if (!formData.date.trim()) {
-      Alert.alert('Error', 'Please enter a date');
-      return;
-    }
-    if (!formData.time.trim()) {
-      Alert.alert('Error', 'Please enter a time');
+    if (formData.time === 'Select time') {
+      Alert.alert('Error', 'Please select a time');
       return;
     }
 
+    const maxPlayers = formData.gameMode === '3vs3' ? 6 : 8;
+
     const newMatch = {
       id: matches.length + 1,
-      name: formData.name,
+      name: formData.gameMode,
       location: formData.location,
       lat: formData.lat,
       lng: formData.lng,
       time: formData.time,
-      players: 1,
-      maxPlayers: 12,
-      type: formData.type,
+      players: formData.gameMode === '3vs3' ? 3 : 4,
+      maxPlayers: maxPlayers,
     };
 
     setMatches([...matches, newMatch]);
-    Alert.alert('Success!', `Match "${formData.name}" created!`);
+    Alert.alert('Success!', `${formData.gameMode} match created!`);
     
     // Reset form
     setFormData({
-      name: '',
+      gameMode: '3vs3',
       location: 'Select location on map',
-      date: '',
-      time: '',
-      type: 'Beach',
+      date: 'Select date',
+      time: 'Select time',
       lat: -23.5505,
       lng: -46.4244,
     });
@@ -136,11 +159,8 @@ export default function App() {
       <View style={styles.matchCard}>
         <View style={styles.matchHeader}>
           <View style={styles.matchTitleContainer}>
-            <Text style={styles.matchName}>{item.name}</Text>
-            <View style={[styles.typeTag, { backgroundColor: item.type === 'Beach' ? '#FFE5CC' : '#CCE5FF' }]}>
-              <Text style={[styles.typeTagText, { color: item.type === 'Beach' ? '#E55100' : '#004E89' }]}>
-                {item.type}
-              </Text>
+            <View style={styles.gameModeTag}>
+              <Text style={styles.gameModeName}>{item.name}</Text>
             </View>
           </View>
           <View style={[styles.spotsIndicator, { backgroundColor: isFull ? '#FEE2E2' : '#D1FAE5' }]}>
@@ -181,7 +201,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header - with extra top padding for notch */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>⚡ Volley Rio</Text>
         <Text style={styles.headerSubtitle}>Find your game</Text>
@@ -241,22 +261,50 @@ export default function App() {
           <Text style={styles.createTitle}>Create New Match</Text>
           <Text style={styles.createSubtitle}>Get the game started</Text>
 
-          {/* Match Name */}
+          {/* Game Mode Selector */}
           <View style={styles.formField}>
-            <Text style={styles.label}>Match Name</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="e.g., Beach Volleyball at Copacabana"
-              placeholderTextColor={COLORS.textLight}
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-            />
+            <Text style={styles.label}>Game Mode</Text>
+            <View style={styles.gameModeSelector}>
+              <TouchableOpacity
+                style={[
+                  styles.gameModeBtn,
+                  formData.gameMode === '3vs3' && styles.gameModeBtnActive,
+                ]}
+                onPress={() => setFormData({ ...formData, gameMode: '3vs3' })}
+              >
+                <Text
+                  style={[
+                    styles.gameModeBtnText,
+                    formData.gameMode === '3vs3' && styles.gameModeBtnTextActive,
+                  ]}
+                >
+                  3vs3
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.gameModeBtn,
+                  { marginLeft: 12 },
+                  formData.gameMode === '4vs4' && styles.gameModeBtnActive,
+                ]}
+                onPress={() => setFormData({ ...formData, gameMode: '4vs4' })}
+              >
+                <Text
+                  style={[
+                    styles.gameModeBtnText,
+                    formData.gameMode === '4vs4' && styles.gameModeBtnTextActive,
+                  ]}
+                >
+                  4vs4
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Location Picker with Map */}
           <View style={styles.formField}>
             <Text style={styles.label}>📍 Location</Text>
-            <Text style={styles.locationHint}>Move the map and zoom. The 🎯 in the center is your location.</Text>
+            <Text style={styles.locationHint}>Move the map and zoom. The 📍 in the center is your location.</Text>
             <MapView
               ref={mapRef}
               style={styles.locationMap}
@@ -272,9 +320,9 @@ export default function App() {
               ))}
             </MapView>
             
-            {/* Center Pointer */}
+            {/* Center Pin */}
             <View style={styles.centerPointer}>
-              <Text style={styles.centerPointerText}>🎯</Text>
+              <Text style={styles.centerPointerText}>📍</Text>
             </View>
 
             <TouchableOpacity style={styles.setLocationBtn} onPress={setLocationFromMap}>
@@ -286,68 +334,20 @@ export default function App() {
             </View>
           </View>
 
-          {/* Date and Time */}
-          <View style={styles.formRow}>
-            <View style={[styles.formField, { flex: 1 }]}>
-              <Text style={styles.label}>Date</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="e.g., Apr 25"
-                placeholderTextColor={COLORS.textLight}
-                value={formData.date}
-                onChangeText={(text) => setFormData({ ...formData, date: text })}
-              />
-            </View>
-            <View style={[styles.formField, { flex: 1, marginLeft: 12 }]}>
-              <Text style={styles.label}>Time</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="e.g., 10:00 AM"
-                placeholderTextColor={COLORS.textLight}
-                value={formData.time}
-                onChangeText={(text) => setFormData({ ...formData, time: text })}
-              />
-            </View>
+          {/* Date Picker */}
+          <View style={styles.formField}>
+            <Text style={styles.label}>Date</Text>
+            <TouchableOpacity style={styles.pickerBtn} onPress={openDatePicker}>
+              <Text style={styles.pickerBtnText}>{formData.date}</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Match Type */}
+          {/* Time Picker */}
           <View style={styles.formField}>
-            <Text style={styles.label}>Match Type</Text>
-            <View style={styles.typeSelector}>
-              <TouchableOpacity
-                style={[
-                  styles.typeOption,
-                  formData.type === 'Beach' && styles.typeOptionActive,
-                ]}
-                onPress={() => setFormData({ ...formData, type: 'Beach' })}
-              >
-                <Text
-                  style={[
-                    styles.typeOptionText,
-                    formData.type === 'Beach' && styles.typeOptionTextActive,
-                  ]}
-                >
-                  🏖️ Beach
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.typeOption,
-                  { marginLeft: 12 },
-                  formData.type === 'Indoor' && styles.typeOptionActive,
-                ]}
-                onPress={() => setFormData({ ...formData, type: 'Indoor' })}
-              >
-                <Text
-                  style={[
-                    styles.typeOptionText,
-                    formData.type === 'Indoor' && styles.typeOptionTextActive,
-                  ]}
-                >
-                  🏐 Indoor
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.label}>Time</Text>
+            <TouchableOpacity style={styles.pickerBtn} onPress={openTimePicker}>
+              <Text style={styles.pickerBtnText}>{formData.time}</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Create Button */}
@@ -367,7 +367,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingTop: 24,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -433,21 +434,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
-  matchName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  typeTag: {
+  gameModeTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
   },
-  typeTagText: {
-    fontSize: 12,
-    fontWeight: '600',
+  gameModeName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.white,
   },
   spotsIndicator: {
     width: 50,
@@ -522,10 +519,6 @@ const styles = StyleSheet.create({
   formField: {
     marginBottom: 16,
   },
-  formRow: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
   label: {
     fontSize: 13,
     fontWeight: '700',
@@ -534,15 +527,30 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  textInput: {
-    height: 48,
+  gameModeSelector: {
+    flexDirection: 'row',
+  },
+  gameModeBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     backgroundColor: COLORS.white,
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    alignItems: 'center',
+  },
+  gameModeBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  gameModeBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
     color: COLORS.text,
+  },
+  gameModeBtnTextActive: {
+    color: COLORS.white,
   },
   locationHint: {
     fontSize: 12,
@@ -569,7 +577,7 @@ const styles = StyleSheet.create({
     pointerEvents: 'none',
   },
   centerPointerText: {
-    fontSize: 32,
+    fontSize: 36,
   },
   setLocationBtn: {
     paddingVertical: 12,
@@ -596,30 +604,19 @@ const styles = StyleSheet.create({
     color: COLORS.accent,
     fontWeight: '600',
   },
-  typeSelector: {
-    flexDirection: 'row',
-  },
-  typeOption: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  pickerBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     backgroundColor: COLORS.white,
     borderRadius: 10,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: 'center',
   },
-  typeOptionActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  typeOptionText: {
+  pickerBtnText: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
-  },
-  typeOptionTextActive: {
-    color: COLORS.white,
   },
   createBtn: {
     paddingVertical: 16,
