@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, Modal, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, Modal, Dimensions, Animated } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 
 const COLORS = {
@@ -19,6 +19,7 @@ const DATES = ['Apr 23', 'Apr 24', 'Apr 25', 'Apr 26', 'Apr 27', 'Apr 28', 'Apr 
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('map');
+  const [viewMode, setViewMode] = useState('map'); // 'map' or 'list'
   const [matches, setMatches] = useState([
     {
       id: 1,
@@ -52,6 +53,9 @@ export default function App() {
     },
   ]);
 
+  const [selectedMatchForJoin, setSelectedMatchForJoin] = useState(null);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+
   // Create form state
   const [formData, setFormData] = useState({
     gameMode: '3vs3',
@@ -76,6 +80,19 @@ export default function App() {
 
   const handleMapRegionChange = (region) => {
     setMapRegion(region);
+  };
+
+  const handleMarkerPress = (match) => {
+    setSelectedMatchForJoin(match);
+    setShowJoinModal(true);
+  };
+
+  const joinMatch = () => {
+    if (selectedMatchForJoin) {
+      Alert.alert('Success!', `You joined ${selectedMatchForJoin.name} at ${selectedMatchForJoin.location}!`);
+      setShowJoinModal(false);
+      setSelectedMatchForJoin(null);
+    }
   };
 
   const setLocationFromMap = () => {
@@ -186,7 +203,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header - with extra top padding for notch */}
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>⚡ Volley Rio</Text>
         <Text style={styles.headerSubtitle}>Find your game</Text>
@@ -216,19 +233,52 @@ export default function App() {
 
       {/* Content */}
       {activeTab === 'map' && (
-        <MapView
-          style={styles.map}
-          initialRegion={mapRegion}
-        >
-          {matches.map((match) => (
-            <Marker
-              key={match.id}
-              coordinate={{ latitude: match.lat, longitude: match.lng }}
-              title={match.name}
-              description={match.location}
+        <View style={styles.mapContainer}>
+          {/* View Mode Toggle */}
+          <View style={styles.viewToggle}>
+            <TouchableOpacity
+              style={[styles.viewBtn, viewMode === 'map' && styles.viewBtnActive]}
+              onPress={() => setViewMode('map')}
+            >
+              <Text style={[styles.viewBtnText, viewMode === 'map' && styles.viewBtnTextActive]}>🗺️ Map</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.viewBtn, viewMode === 'list' && styles.viewBtnActive]}
+              onPress={() => setViewMode('list')}
+            >
+              <Text style={[styles.viewBtnText, viewMode === 'list' && styles.viewBtnTextActive]}>📋 List</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Map View */}
+          {viewMode === 'map' && (
+            <MapView
+              style={styles.map}
+              initialRegion={mapRegion}
+            >
+              {matches.map((match) => (
+                <Marker
+                  key={match.id}
+                  coordinate={{ latitude: match.lat, longitude: match.lng }}
+                  title={match.name}
+                  description={match.location}
+                  onPress={() => handleMarkerPress(match)}
+                />
+              ))}
+            </MapView>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <FlatList
+              data={matches}
+              renderItem={renderMatchCard}
+              keyExtractor={(item) => item.id.toString()}
+              contentContainerStyle={styles.matchesList}
+              scrollEnabled={true}
             />
-          ))}
-        </MapView>
+          )}
+        </View>
       )}
 
       {activeTab === 'matches' && (
@@ -343,7 +393,7 @@ export default function App() {
       )}
 
       {/* Date Picker Modal */}
-      <Modal visible={showDatePicker} transparent animationType="slide">
+      <Modal visible={showDatePicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -370,7 +420,7 @@ export default function App() {
       </Modal>
 
       {/* Time Picker Modal */}
-      <Modal visible={showTimePicker} transparent animationType="slide">
+      <Modal visible={showTimePicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -392,6 +442,59 @@ export default function App() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Join Match Modal */}
+      <Modal visible={showJoinModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.joinModalContent]}>
+            {selectedMatchForJoin && (
+              <>
+                <View style={styles.joinModalHeader}>
+                  <TouchableOpacity onPress={() => setShowJoinModal(false)}>
+                    <Text style={styles.modalClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.joinModalBody}>
+                  <View style={styles.joinGameModeTag}>
+                    <Text style={styles.joinGameModeName}>{selectedMatchForJoin.name}</Text>
+                  </View>
+
+                  <Text style={styles.joinLocation}>📍 {selectedMatchForJoin.location}</Text>
+                  <Text style={styles.joinTime}>⏰ {selectedMatchForJoin.time}</Text>
+
+                  <View style={styles.joinPlayerBar}>
+                    <View style={styles.joinPlayerBarBg}>
+                      <View
+                        style={[
+                          styles.joinPlayerBarFill,
+                          { width: `${(selectedMatchForJoin.players / selectedMatchForJoin.maxPlayers) * 100}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.joinPlayerCount}>
+                      👥 {selectedMatchForJoin.players}/{selectedMatchForJoin.maxPlayers}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.joinJoinBtn,
+                      selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers && styles.joinJoinBtnDisabled,
+                    ]}
+                    onPress={joinMatch}
+                    disabled={selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers}
+                  >
+                    <Text style={styles.joinJoinBtnText}>
+                      {selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers ? 'Match Full' : 'Join Match'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -447,6 +550,37 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     color: COLORS.primary,
+  },
+  mapContainer: {
+    flex: 1,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  viewBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  viewBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  viewBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  viewBtnTextActive: {
+    color: COLORS.white,
   },
   map: {
     flex: 1,
@@ -659,7 +793,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -667,6 +801,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: Dimensions.get('window').height * 0.7,
+  },
+  joinModalContent: {
+    maxHeight: Dimensions.get('window').height * 0.5,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -676,6 +813,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  joinModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   modalTitle: {
     fontSize: 18,
@@ -709,6 +852,68 @@ const styles = StyleSheet.create({
   },
   pickerOptionTextActive: {
     color: COLORS.white,
+  },
+  joinModalBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  joinGameModeTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  joinGameModeName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  joinLocation: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  joinTime: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  joinPlayerBar: {
+    marginBottom: 12,
+  },
+  joinPlayerBarBg: {
+    height: 6,
+    backgroundColor: COLORS.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  joinPlayerBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.success,
+  },
+  joinPlayerCount: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    fontWeight: '600',
+  },
+  joinJoinBtn: {
+    paddingVertical: 12,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  joinJoinBtnDisabled: {
+    backgroundColor: COLORS.border,
+  },
+  joinJoinBtnText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 14,
   },
   createBtn: {
     paddingVertical: 16,
