@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, Modal, Dimensions, Animated } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 
@@ -19,7 +19,7 @@ const DATES = ['Apr 23', 'Apr 24', 'Apr 25', 'Apr 26', 'Apr 27', 'Apr 28', 'Apr 
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('map');
-  const [viewMode, setViewMode] = useState('map'); // 'map' or 'list'
+  const [viewMode, setViewMode] = useState('map');
   const [matches, setMatches] = useState([
     {
       id: 1,
@@ -56,6 +56,10 @@ export default function App() {
   const [selectedMatchForJoin, setSelectedMatchForJoin] = useState(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
 
+  // Animated values for modals
+  const slideAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
   // Create form state
   const [formData, setFormData] = useState({
     gameMode: '3vs3',
@@ -77,6 +81,40 @@ export default function App() {
   });
 
   const mapRef = useRef(null);
+
+  // Animate modal slide up
+  useEffect(() => {
+    if (showDatePicker || showTimePicker || showJoinModal) {
+      slideAnim.setValue(Dimensions.get('window').height);
+      fadeAnim.setValue(0);
+      
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: Dimensions.get('window').height,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [showDatePicker, showTimePicker, showJoinModal]);
 
   const handleMapRegionChange = (region) => {
     setMapRegion(region);
@@ -150,7 +188,7 @@ export default function App() {
       lat: -23.5505,
       lng: -46.4244,
     });
-    setActiveTab('matches');
+    setActiveTab('map');
   };
 
   const renderMatchCard = ({ item }) => {
@@ -201,6 +239,29 @@ export default function App() {
     );
   };
 
+  const openModal = (modalSetter) => {
+    slideAnim.setValue(Dimensions.get('window').height);
+    fadeAnim.setValue(0);
+    modalSetter(true);
+  };
+
+  const closeModal = (modalSetter) => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: Dimensions.get('window').height,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      modalSetter(false);
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -218,12 +279,6 @@ export default function App() {
           <Text style={[styles.tabText, activeTab === 'map' && styles.activeTabText]}>🗺️ Map</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'matches' && styles.activeTab]}
-          onPress={() => setActiveTab('matches')}
-        >
-          <Text style={[styles.tabText, activeTab === 'matches' && styles.activeTabText]}>📋 Matches</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           style={[styles.tab, activeTab === 'create' && styles.activeTab]}
           onPress={() => setActiveTab('create')}
         >
@@ -237,16 +292,12 @@ export default function App() {
           {/* View Mode Toggle */}
           <View style={styles.viewToggle}>
             <TouchableOpacity
-              style={[styles.viewBtn, viewMode === 'map' && styles.viewBtnActive]}
-              onPress={() => setViewMode('map')}
+              style={styles.viewBtn}
+              onPress={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
             >
-              <Text style={[styles.viewBtnText, viewMode === 'map' && styles.viewBtnTextActive]}>🗺️ Map</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.viewBtn, viewMode === 'list' && styles.viewBtnActive]}
-              onPress={() => setViewMode('list')}
-            >
-              <Text style={[styles.viewBtnText, viewMode === 'list' && styles.viewBtnTextActive]}>📋 List</Text>
+              <Text style={styles.viewBtnText}>
+                {viewMode === 'map' ? '📋 List View' : '🗺️ Map View'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -279,16 +330,6 @@ export default function App() {
             />
           )}
         </View>
-      )}
-
-      {activeTab === 'matches' && (
-        <FlatList
-          data={matches}
-          renderItem={renderMatchCard}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.matchesList}
-          scrollEnabled={true}
-        />
       )}
 
       {activeTab === 'create' && (
@@ -372,7 +413,7 @@ export default function App() {
           {/* Date Picker */}
           <View style={styles.formField}>
             <Text style={styles.label}>📅 Date</Text>
-            <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowDatePicker(true)}>
+            <TouchableOpacity style={styles.pickerBtn} onPress={() => openModal(setShowDatePicker)}>
               <Text style={styles.pickerBtnText}>{formData.date}</Text>
             </TouchableOpacity>
           </View>
@@ -380,7 +421,7 @@ export default function App() {
           {/* Time Picker */}
           <View style={styles.formField}>
             <Text style={styles.label}>⏰ Time</Text>
-            <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowTimePicker(true)}>
+            <TouchableOpacity style={styles.pickerBtn} onPress={() => openModal(setShowTimePicker)}>
               <Text style={styles.pickerBtnText}>{formData.time}</Text>
             </TouchableOpacity>
           </View>
@@ -392,14 +433,42 @@ export default function App() {
         </ScrollView>
       )}
 
-      {/* Date Picker Modal */}
-      <Modal visible={showDatePicker} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Date</Text>
-              <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                <Text style={styles.modalClose}>✕</Text>
+      {/* Bottom Sheet Overlay - Only appears when modal is open */}
+      {(showDatePicker || showTimePicker || showJoinModal) && (
+        <Animated.View
+          style={[
+            styles.bottomSheetOverlay,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.overlayTouchable}
+            onPress={() => {
+              if (showDatePicker) closeModal(setShowDatePicker);
+              if (showTimePicker) closeModal(setShowTimePicker);
+              if (showJoinModal) closeModal(setShowJoinModal);
+            }}
+          />
+        </Animated.View>
+      )}
+
+      {/* Date Picker Bottom Sheet */}
+      {showDatePicker && (
+        <Animated.View
+          style={[
+            styles.animatedBottomSheet,
+            {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <View style={styles.bottomSheetContent}>
+            <View style={styles.bottomSheetHeader}>
+              <Text style={styles.bottomSheetTitle}>Select Date</Text>
+              <TouchableOpacity onPress={() => closeModal(setShowDatePicker)}>
+                <Text style={styles.bottomSheetClose}>✕</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.pickerScroll}>
@@ -407,7 +476,10 @@ export default function App() {
                 <TouchableOpacity
                   key={date}
                   style={[styles.pickerOption, formData.date === date && styles.pickerOptionActive]}
-                  onPress={() => selectDate(date)}
+                  onPress={() => {
+                    selectDate(date);
+                    closeModal(setShowDatePicker);
+                  }}
                 >
                   <Text style={[styles.pickerOptionText, formData.date === date && styles.pickerOptionTextActive]}>
                     {date}
@@ -416,17 +488,24 @@ export default function App() {
               ))}
             </ScrollView>
           </View>
-        </View>
-      </Modal>
+        </Animated.View>
+      )}
 
-      {/* Time Picker Modal */}
-      <Modal visible={showTimePicker} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Time</Text>
-              <TouchableOpacity onPress={() => setShowTimePicker(false)}>
-                <Text style={styles.modalClose}>✕</Text>
+      {/* Time Picker Bottom Sheet */}
+      {showTimePicker && (
+        <Animated.View
+          style={[
+            styles.animatedBottomSheet,
+            {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <View style={styles.bottomSheetContent}>
+            <View style={styles.bottomSheetHeader}>
+              <Text style={styles.bottomSheetTitle}>Select Time</Text>
+              <TouchableOpacity onPress={() => closeModal(setShowTimePicker)}>
+                <Text style={styles.bottomSheetClose}>✕</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.pickerScroll}>
@@ -434,7 +513,10 @@ export default function App() {
                 <TouchableOpacity
                   key={time}
                   style={[styles.pickerOption, formData.time === time && styles.pickerOptionActive]}
-                  onPress={() => selectTime(time)}
+                  onPress={() => {
+                    selectTime(time);
+                    closeModal(setShowTimePicker);
+                  }}
                 >
                   <Text style={[styles.pickerOptionText, formData.time === time && styles.pickerOptionTextActive]}>
                     {time}
@@ -443,61 +525,65 @@ export default function App() {
               ))}
             </ScrollView>
           </View>
-        </View>
-      </Modal>
+        </Animated.View>
+      )}
 
-      {/* Join Match Modal */}
-      <Modal visible={showJoinModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.joinModalContent]}>
-            {selectedMatchForJoin && (
-              <>
-                <View style={styles.joinModalHeader}>
-                  <TouchableOpacity onPress={() => setShowJoinModal(false)}>
-                    <Text style={styles.modalClose}>✕</Text>
-                  </TouchableOpacity>
-                </View>
+      {/* Join Match Bottom Sheet */}
+      {showJoinModal && selectedMatchForJoin && (
+        <Animated.View
+          style={[
+            styles.animatedBottomSheet,
+            {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <View style={[styles.bottomSheetContent, styles.joinBottomSheetContent]}>
+            <View style={styles.joinBottomSheetHeader}>
+              <View style={{ width: 24 }} />
+              <TouchableOpacity onPress={() => closeModal(setShowJoinModal)}>
+                <Text style={styles.bottomSheetClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
-                <View style={styles.joinModalBody}>
-                  <View style={styles.joinGameModeTag}>
-                    <Text style={styles.joinGameModeName}>{selectedMatchForJoin.name}</Text>
-                  </View>
+            <View style={styles.joinBottomSheetBody}>
+              <View style={styles.joinGameModeTag}>
+                <Text style={styles.joinGameModeName}>{selectedMatchForJoin.name}</Text>
+              </View>
 
-                  <Text style={styles.joinLocation}>📍 {selectedMatchForJoin.location}</Text>
-                  <Text style={styles.joinTime}>⏰ {selectedMatchForJoin.time}</Text>
+              <Text style={styles.joinLocation}>📍 {selectedMatchForJoin.location}</Text>
+              <Text style={styles.joinTime}>⏰ {selectedMatchForJoin.time}</Text>
 
-                  <View style={styles.joinPlayerBar}>
-                    <View style={styles.joinPlayerBarBg}>
-                      <View
-                        style={[
-                          styles.joinPlayerBarFill,
-                          { width: `${(selectedMatchForJoin.players / selectedMatchForJoin.maxPlayers) * 100}%` },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.joinPlayerCount}>
-                      👥 {selectedMatchForJoin.players}/{selectedMatchForJoin.maxPlayers}
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
+              <View style={styles.joinPlayerBar}>
+                <View style={styles.joinPlayerBarBg}>
+                  <View
                     style={[
-                      styles.joinJoinBtn,
-                      selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers && styles.joinJoinBtnDisabled,
+                      styles.joinPlayerBarFill,
+                      { width: `${(selectedMatchForJoin.players / selectedMatchForJoin.maxPlayers) * 100}%` },
                     ]}
-                    onPress={joinMatch}
-                    disabled={selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers}
-                  >
-                    <Text style={styles.joinJoinBtnText}>
-                      {selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers ? 'Match Full' : 'Join Match'}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 </View>
-              </>
-            )}
+                <Text style={styles.joinPlayerCount}>
+                  👥 {selectedMatchForJoin.players}/{selectedMatchForJoin.maxPlayers}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.joinJoinBtn,
+                  selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers && styles.joinJoinBtnDisabled,
+                ]}
+                onPress={joinMatch}
+                disabled={selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers}
+              >
+                <Text style={styles.joinJoinBtnText}>
+                  {selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers ? 'Match Full' : 'Join Match'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -558,28 +644,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 10,
   },
   viewBtn: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: COLORS.white,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-  },
-  viewBtnActive: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    borderRadius: 10,
+    alignItems: 'center',
   },
   viewBtnText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  viewBtnTextActive: {
+    fontWeight: '700',
     color: COLORS.white,
   },
   map: {
@@ -791,21 +867,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
   },
-  modalOverlay: {
-    flex: 1,
+  bottomSheetOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
   },
-  modalContent: {
+  overlayTouchable: {
+    flex: 1,
+  },
+  animatedBottomSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+  },
+  bottomSheetContent: {
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: Dimensions.get('window').height * 0.7,
   },
-  joinModalContent: {
+  joinBottomSheetContent: {
     maxHeight: Dimensions.get('window').height * 0.5,
   },
-  modalHeader: {
+  bottomSheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -814,18 +903,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  joinModalHeader: {
+  joinBottomSheetHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  modalTitle: {
+  bottomSheetTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: COLORS.text,
   },
-  modalClose: {
+  bottomSheetClose: {
     fontSize: 24,
     fontWeight: '600',
     color: COLORS.textLight,
@@ -853,7 +943,7 @@ const styles = StyleSheet.create({
   pickerOptionTextActive: {
     color: COLORS.white,
   },
-  joinModalBody: {
+  joinBottomSheetBody: {
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
