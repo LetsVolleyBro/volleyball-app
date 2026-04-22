@@ -1,7 +1,7 @@
 // API utility functions
 // Update this to match your backend URL
 
-const API_URL = 'http://187.124.58.56:5000/api';
+const API_URL = 'http://187.124.58.56:8080/api';
 
 // Get current user ID from device (simple implementation)
 export const getOrCreateUser = async (deviceId) => {
