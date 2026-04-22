@@ -83,6 +83,7 @@ export default function App() {
   };
 
   // Animate modal slide up
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (showDatePicker || showTimePicker || showJoinModal) {
       slideAnim.setValue(Dimensions.get('window').height);
