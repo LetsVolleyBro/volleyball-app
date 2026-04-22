@@ -10,7 +10,7 @@ npm install
 npm start
 ```
 
-Server runs on `http://localhost:3000`
+Server runs on `http://localhost:5000`
 
 ## API Endpoints
 
@@ -39,7 +39,7 @@ Auto-creates `volleyball.db` on first run.
 ## Example Request
 
 ```bash
-curl -X POST http://localhost:3000/api/matches \
+curl -X POST http://localhost:5000/api/matches \
   -H "Content-Type: application/json" \
   -d '{
     "name": "3vs3",
