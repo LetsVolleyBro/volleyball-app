@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, Modal, Dimensions, Animated } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, SafeAreaView, TextInput, Alert, Modal, Dimensions, Animated, AsyncStorage, ActivityIndicator } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { fetchMatches, createMatch, joinMatch, getOrCreateUser } from './api';
 
 const COLORS = {
   primary: '#FF6B35',
@@ -20,39 +21,9 @@ const DATES = ['Apr 23', 'Apr 24', 'Apr 25', 'Apr 26', 'Apr 27', 'Apr 28', 'Apr 
 export default function App() {
   const [activeTab, setActiveTab] = useState('map');
   const [viewMode, setViewMode] = useState('map');
-  const [matches, setMatches] = useState([
-    {
-      id: 1,
-      name: '3vs3',
-      location: 'Copacabana Beach',
-      lat: -23.5505,
-      lng: -46.4244,
-      time: '10:00 AM',
-      players: 6,
-      maxPlayers: 6,
-    },
-    {
-      id: 2,
-      name: '4vs4',
-      location: 'Leblon Sports Court',
-      lat: -23.5625,
-      lng: -46.3494,
-      time: '3:00 PM',
-      players: 8,
-      maxPlayers: 8,
-    },
-    {
-      id: 3,
-      name: '3vs3',
-      location: 'Ipanema Park',
-      lat: -23.5886,
-      lng: -46.4244,
-      time: '5:30 PM',
-      players: 4,
-      maxPlayers: 6,
-    },
-  ]);
-
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
   const [selectedMatchForJoin, setSelectedMatchForJoin] = useState(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
 
@@ -75,12 +46,41 @@ export default function App() {
 
   const [mapRegion, setMapRegion] = useState({
     latitude: -23.5505,
-    longitude: -46.4244,
+    longitude: -23.5505,
     latitudeDelta: 0.1,
     longitudeDelta: 0.1,
   });
 
   const mapRef = useRef(null);
+
+  // Initialize user and load matches
+  useEffect(() => {
+    initializeApp();
+  }, []);
+
+  const initializeApp = async () => {
+    try {
+      // Get or generate device ID
+      let deviceId = await AsyncStorage.getItem('deviceId');
+      if (!deviceId) {
+        deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await AsyncStorage.setItem('deviceId', deviceId);
+      }
+
+      // Get or create user
+      const user = await getOrCreateUser(deviceId);
+      setUserId(user);
+
+      // Load matches from backend
+      const fetchedMatches = await fetchMatches();
+      setMatches(fetchedMatches);
+    } catch (error) {
+      console.error('Init error:', error);
+      Alert.alert('Error', 'Failed to initialize app. Make sure backend is running.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Animate modal slide up
   useEffect(() => {
@@ -125,11 +125,19 @@ export default function App() {
     setShowJoinModal(true);
   };
 
-  const joinMatch = () => {
-    if (selectedMatchForJoin) {
-      Alert.alert('Success!', `You joined ${selectedMatchForJoin.name} at ${selectedMatchForJoin.location}!`);
-      setShowJoinModal(false);
-      setSelectedMatchForJoin(null);
+  const joinMatchHandler = async () => {
+    if (selectedMatchForJoin && userId) {
+      try {
+        await joinMatch(selectedMatchForJoin.id, userId);
+        Alert.alert('Success!', `You joined ${selectedMatchForJoin.name} at ${selectedMatchForJoin.location}!`);
+        setShowJoinModal(false);
+        setSelectedMatchForJoin(null);
+        // Refresh matches
+        const fetchedMatches = await fetchMatches();
+        setMatches(fetchedMatches);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to join match');
+      }
     }
   };
 
@@ -153,7 +161,7 @@ export default function App() {
     setShowTimePicker(false);
   };
 
-  const createMatch = () => {
+  const createMatchHandler = async () => {
     if (formData.date === 'Select date') {
       Alert.alert('Error', 'Please select a date');
       return;
@@ -163,37 +171,50 @@ export default function App() {
       return;
     }
 
-    const maxPlayers = formData.gameMode === '3vs3' ? 6 : 8;
+    if (!userId) {
+      Alert.alert('Error', 'User not initialized');
+      return;
+    }
 
-    const newMatch = {
-      id: matches.length + 1,
-      name: formData.gameMode,
-      location: formData.location,
-      lat: formData.lat,
-      lng: formData.lng,
-      time: formData.time,
-      players: formData.gameMode === '3vs3' ? 3 : 4,
-      maxPlayers: maxPlayers,
-    };
+    try {
+      const maxPlayers = formData.gameMode === '3vs3' ? 6 : 8;
 
-    setMatches([...matches, newMatch]);
-    Alert.alert('Success!', `${formData.gameMode} match created!`);
-    
-    // Reset form
-    setFormData({
-      gameMode: '3vs3',
-      location: 'Select location on map',
-      date: 'Select date',
-      time: 'Select time',
-      lat: -23.5505,
-      lng: -46.4244,
-    });
-    setActiveTab('map');
+      const newMatchData = {
+        name: formData.gameMode,
+        location: formData.location,
+        lat: formData.lat,
+        lng: formData.lng,
+        time: formData.time,
+        date: formData.date,
+        maxPlayers: maxPlayers,
+      };
+
+      await createMatch(newMatchData, userId);
+      Alert.alert('Success!', `${formData.gameMode} match created!`);
+      
+      // Reset form
+      setFormData({
+        gameMode: '3vs3',
+        location: 'Select location on map',
+        date: 'Select date',
+        time: 'Select time',
+        lat: -23.5505,
+        lng: -46.4244,
+      });
+      setActiveTab('map');
+
+      // Refresh matches
+      const fetchedMatches = await fetchMatches();
+      setMatches(fetchedMatches);
+    } catch (error) {
+      console.error('Create match error:', error);
+      Alert.alert('Error', 'Failed to create match. Make sure backend is running.');
+    }
   };
 
   const renderMatchCard = ({ item }) => {
-    const spotsLeft = item.maxPlayers - item.players;
-    const isFull = spotsLeft === 0;
+    const spotsLeft = item.maxPlayers - (item.currentPlayers || 0);
+    const isFull = spotsLeft <= 0;
 
     return (
       <View style={styles.matchCard}>
@@ -220,12 +241,12 @@ export default function App() {
             <View
               style={[
                 styles.playerBarFill,
-                { width: `${(item.players / item.maxPlayers) * 100}%` },
+                { width: `${((item.currentPlayers || 0) / item.maxPlayers) * 100}%` },
               ]}
             />
           </View>
           <Text style={styles.playerCount}>
-            👥 {item.players}/{item.maxPlayers}
+            👥 {item.currentPlayers || 0}/{item.maxPlayers}
           </Text>
         </View>
 
@@ -237,12 +258,6 @@ export default function App() {
         </TouchableOpacity>
       </View>
     );
-  };
-
-  const openModal = (modalSetter) => {
-    slideAnim.setValue(Dimensions.get('window').height);
-    fadeAnim.setValue(0);
-    modalSetter(true);
   };
 
   const closeModal = (modalSetter) => {
@@ -261,6 +276,15 @@ export default function App() {
       modalSetter(false);
     });
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ marginTop: 16, color: COLORS.textLight }}>Loading Volley Rio...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -413,7 +437,7 @@ export default function App() {
           {/* Date Picker */}
           <View style={styles.formField}>
             <Text style={styles.label}>📅 Date</Text>
-            <TouchableOpacity style={styles.pickerBtn} onPress={() => openModal(setShowDatePicker)}>
+            <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowDatePicker(true)}>
               <Text style={styles.pickerBtnText}>{formData.date}</Text>
             </TouchableOpacity>
           </View>
@@ -421,19 +445,19 @@ export default function App() {
           {/* Time Picker */}
           <View style={styles.formField}>
             <Text style={styles.label}>⏰ Time</Text>
-            <TouchableOpacity style={styles.pickerBtn} onPress={() => openModal(setShowTimePicker)}>
+            <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowTimePicker(true)}>
               <Text style={styles.pickerBtnText}>{formData.time}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Create Button */}
-          <TouchableOpacity style={styles.createBtn} onPress={createMatch}>
+          <TouchableOpacity style={styles.createBtn} onPress={createMatchHandler}>
             <Text style={styles.createBtnText}>Create Match</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
 
-      {/* Bottom Sheet Overlay - Only appears when modal is open */}
+      {/* Bottom Sheet Overlay */}
       {(showDatePicker || showTimePicker || showJoinModal) && (
         <Animated.View
           style={[
@@ -559,25 +583,25 @@ export default function App() {
                   <View
                     style={[
                       styles.joinPlayerBarFill,
-                      { width: `${(selectedMatchForJoin.players / selectedMatchForJoin.maxPlayers) * 100}%` },
+                      { width: `${((selectedMatchForJoin.currentPlayers || 0) / selectedMatchForJoin.maxPlayers) * 100}%` },
                     ]}
                   />
                 </View>
                 <Text style={styles.joinPlayerCount}>
-                  👥 {selectedMatchForJoin.players}/{selectedMatchForJoin.maxPlayers}
+                  👥 {selectedMatchForJoin.currentPlayers || 0}/{selectedMatchForJoin.maxPlayers}
                 </Text>
               </View>
 
               <TouchableOpacity
                 style={[
                   styles.joinJoinBtn,
-                  selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers && styles.joinJoinBtnDisabled,
+                  (selectedMatchForJoin.currentPlayers || 0) >= selectedMatchForJoin.maxPlayers && styles.joinJoinBtnDisabled,
                 ]}
-                onPress={joinMatch}
-                disabled={selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers}
+                onPress={joinMatchHandler}
+                disabled={(selectedMatchForJoin.currentPlayers || 0) >= selectedMatchForJoin.maxPlayers}
               >
                 <Text style={styles.joinJoinBtnText}>
-                  {selectedMatchForJoin.players >= selectedMatchForJoin.maxPlayers ? 'Match Full' : 'Join Match'}
+                  {(selectedMatchForJoin.currentPlayers || 0) >= selectedMatchForJoin.maxPlayers ? 'Match Full' : 'Join Match'}
                 </Text>
               </TouchableOpacity>
             </View>
