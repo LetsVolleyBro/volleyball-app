@@ -2,7 +2,7 @@
   "name": "volley-rio",
   "version": "1.0.0",
   "description": "Volleyball match app for Rio de Janeiro",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "app.js",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
